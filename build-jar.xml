@@ -3,7 +3,7 @@
     <!--this file was created by Eclipse Runnable JAR Export Wizard-->
     <!--ANT 1.7 is required                                        -->
     <target name="create_run_jar">
-        <jar destfile="C:/Users/Bartek/isp.jar">
+        <jar destfile="isp.jar">
             <manifest>
                 <attribute name="Main-Class" value="org.eclipse.jdt.internal.jarinjarloader.JarRsrcLoader"/>
                 <attribute name="Rsrc-Main-Class" value="com.bytestorm.isp.Main"/>
@@ -11,7 +11,7 @@
                 <attribute name="Rsrc-Class-Path" value="./ super-csv-2.2.0.jar joda-time-2.3.jar commons-codec-1.5.jar commons-logging-1.1.jar log4j-1.2.13.jar poi-3.10-FINAL-20140208.jar dom4j-1.6.1.jar poi-excelant-3.10-FINAL-20140208.jar poi-ooxml-3.10-FINAL-20140208.jar poi-ooxml-schemas-3.10-FINAL-20140208.jar poi-scratchpad-3.10-FINAL-20140208.jar stax-api-1.0.1.jar xmlbeans-2.3.0.jar commons-io-2.4.jar commons-cli-1.2.jar"/>
             </manifest>
             <zipfileset src="jar-in-jar-loader.zip"/>
-            <fileset dir="C:/Users/Bartek/Development/java/IncomeSheetProcessor/bin"/>
+            <fileset dir="bin"/>
             <zipfileset dir="C:\Users\Bartek\Development\java\IncomeSheetProcessor\libs" includes="super-csv-2.2.0.jar"/>
             <zipfileset dir="C:\Users\Bartek\Development\java\IncomeSheetProcessor\libs" includes="joda-time-2.3.jar"/>
             <zipfileset dir="C:\Users\Bartek\Development\java\IncomeSheetProcessor\libs" includes="commons-codec-1.5.jar"/>
