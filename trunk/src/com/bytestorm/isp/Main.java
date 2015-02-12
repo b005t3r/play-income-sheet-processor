@@ -47,9 +47,10 @@ public class Main {
         final CommandLineParser parser = new PosixParser();
         options.addOption("v", "verbose", false, "verbose debug messages");
         options.addOption("L", "local-dir", true, "use local files from specified directory instead of GCS");
-        options.addOption("D", "date", true, "raport date in format yyyy.MM or yyyyMM, only used if local-dir is not defined");
-        options.addOption("o", "output", true, "output file name");        
-        options.addOption("C", "config", true, "properties files with style configuration");
+        options.addOption("D", "date", true, "raport date in format yyyy.MM or yyyyMM, only used if local-dir is not defined" + 
+                " (optional, by default previous month is used)");
+        options.addOption("o", "output", true, "output file name (optional, by default yyyyMM.xlsx, where date is report date");        
+        options.addOption("C", "config", true, "properties files with style configuration (use -h for config template)");
         options.addOption("h", "help", false, "extended help");
         options.addOption(null, "no-overwrite", false, "prevents output file overwrite");
         options.addOption(null, "gcs-bucket", true, "GCS bucked for Play reports");
