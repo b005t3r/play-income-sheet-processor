@@ -447,7 +447,6 @@ public class Transaction {
     private BigDecimal conversionRate;
     private String merchantCurrency;
     private BigDecimal payout;
-    private int conversionRateBaseAmount;
-    
+    private int conversionRateBaseAmount;    
     private BigDecimal taxAmount;    
 }

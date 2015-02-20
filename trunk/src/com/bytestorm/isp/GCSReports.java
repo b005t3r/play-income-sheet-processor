@@ -8,6 +8,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -20,6 +21,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.joda.time.DateTime;
 
@@ -42,7 +45,7 @@ import com.google.api.services.storage.model.StorageObject;
 
 public class GCSReports implements ReportsProvider {
 
-    public GCSReports(Configuration cfg, Date date) throws IOException, IllegalArgumentException {
+    public GCSReports(Configuration cfg, Date date, boolean keepReports) throws IOException, IllegalArgumentException {
         if (null == cfg.getProperty("gcs.reports.bucket")) {
             if (DEFAULT_BUCKET.equals("<PLAY_BUCKET>")) {
                 throw new IllegalArgumentException("GCS reports bucket id missing, and DEFAULT_BUCKET field is set");
@@ -57,8 +60,7 @@ public class GCSReports implements ReportsProvider {
         } catch (GeneralSecurityException ex) {
             throw new IllegalArgumentException("Unable to create transprt", ex);
         }
-        Credential credential  = authorize(httpTransport, cfg);
-        
+        Credential credential  = authorize(httpTransport, cfg);        
         // storage client
         this.bucket = cfg.getProperty("gcs.reports.bucket");
         this.date = new DateTime(date);
@@ -71,6 +73,40 @@ public class GCSReports implements ReportsProvider {
         }
         downloadAll(client, "sales/salesreport_" + DATE_FORMAT.format(this.date.toDate()), salesReports);
         downloadAll(client, "sales/salesreport_" + DATE_FORMAT.format(this.date.plusMonths(1).toDate()), salesReports);
+        if (keepReports) {
+            Log.v("Saving downloaded CSV files");
+            // resolve collisions
+            HashMap<String, ArrayList<File>> collisions = new HashMap<>();
+            for (Map.Entry<File, String> entry : mapping.entrySet()) {
+                ArrayList<File> filesWithName = collisions.get(entry.getValue()); 
+                if (null == filesWithName) {
+                    filesWithName = new ArrayList<>();
+                    collisions.put(entry.getValue(), filesWithName);
+                }
+                filesWithName.add(entry.getKey());
+            }
+            for (Map.Entry<String, ArrayList<File>> entry : collisions.entrySet()) {
+                if (entry.getValue().size() > 1) {
+                    // colliding filename found
+                    String fname = entry.getKey();
+                    String ext = "";
+                    int extPos = fname.lastIndexOf('.'); 
+                    if (extPos > 0) {
+                        ext = fname.substring(extPos);
+                        fname = fname.substring(0, extPos);                        
+                    }
+                    int n = 1;
+                    for (File f : entry.getValue()) {
+                        mapping.put(f, fname + " (" + (n++) + ")" + ext);
+                    }
+                }
+            }
+            for (Map.Entry<File, String> entry : mapping.entrySet()) {
+                final File src = entry.getKey();
+                final File dst = new File(entry.getValue());
+                Files.copy(src.toPath(), dst.toPath());
+            }
+        }
     }
 
     @Override
@@ -98,13 +134,15 @@ public class GCSReports implements ReportsProvider {
     }
     
     private File downloadAndUnpack(Storage client, StorageObject file) throws IOException {
+        Log.v("Downloading storage file " + file.getName());
         String fileName = file.getName();
         Storage.Objects.Get getObject = client.objects().get(bucket, fileName);
         ByteArrayOutputStream data = new ByteArrayOutputStream();
         getObject.getMediaHttpDownloader().setDirectDownloadEnabled(true);
         getObject.executeMediaAndDownloadTo(data);
         File out = File.createTempFile("tmp", ".csv");
-        Utils.unpack(new ByteArrayInputStream(data.toByteArray()), out);
+        String origName = Utils.unpack(new ByteArrayInputStream(data.toByteArray()), out);
+        mapping.put(out, origName);
         return out;
     }
     
@@ -196,6 +234,7 @@ public class GCSReports implements ReportsProvider {
     private DateTime date;
     private ArrayList<File> earningReports = new ArrayList<>();
     private ArrayList<File> salesReports = new ArrayList<>();
+    private HashMap<File, String> mapping = new HashMap<>();
     
     private static final String DEFAULT_BUCKET = "<PLAY_BUCKET>";
     

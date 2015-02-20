@@ -61,6 +61,7 @@ public class Main {
         options.addOption(null, "no-summary-sheet", false, "disables summary sheet output");
         options.addOption(null, "no-vat-sheet", false, "disables vat sheet output");
         options.addOption(null, "no-vat", false, "disables VAT data processing (sales reports will not be used, implies no-vat-sheet)");
+        options.addOption(null, "keep-reports", false, "keep download CSV reports, this switch is ignored in local mode");
         help.setWidth(80);
         try {            
             final CommandLine cli = parser.parse(options, args);
@@ -139,7 +140,7 @@ public class Main {
                     DateTime dt = new DateTime().minusMonths(1);
                     date = dt.toDate();
                 }
-                reports = new GCSReports(config, date);                
+                reports = new GCSReports(config, date, cli.hasOption("keep-reports"));                
             } else {                     
                 reports = new LocalReports(reportsDir);
             }
@@ -363,10 +364,10 @@ public class Main {
         wb.appendCellWithStyle(row, "PLN(NBP)", CellStyleType.HEADER);
         wb.appendCellWithStyle(row, "Różnica", CellStyleType.HEADER);                
         for (Transaction t : transactions) {
-            // skip tax deduction
+            // skip tax deduction            
             if (null == t.getId()) {
-                continue;
-            }
+            	continue;
+            }            
             row = sheet.createRow(rowNbr++);
             wb.appendCellWithStyle(row, t.getId(), centeredCellStyle);
             wb.appendCellWithStyle(row, t.getDate(), CellStyleType.DATE);
@@ -384,7 +385,7 @@ public class Main {
             }
             wb.appendCellWithStyle(row, t.getPayout(), CellStyleType.AMOUNT);
             wb.appendCellWithStyle(row, t.getAmountConverted(), CellStyleType.AMOUNT);
-            wb.appendCellWithStyle(row, t.getSpread(), CellStyleType.AMOUNT);            
+            wb.appendCellWithStyle(row, t.getSpread(), CellStyleType.AMOUNT);
         }
         sheet.setRepeatingRows(CellRangeAddress.valueOf("1"));
         for (int i = 0; i <= (ignoreVat ? 9 : 10); i++) {
@@ -642,10 +643,11 @@ public class Main {
         BigDecimal totalTaxDeduction = BigDecimal.ZERO;
         BigDecimal totalVat = BigDecimal.ZERO;
         
-        for (Transaction t : transactions) {
+        for (Transaction t : transactions) {            
             totalPayout = totalPayout.add(t.getPayout());
             if (null == t.getId()) {
                 totalTaxDeduction = totalTaxDeduction.add(t.getPayout());
+                totalConverted = totalConverted.add(t.getPayout());     
             } else {                
                 if (EU_CURRENCIES.contains(t.getBuyerCurrency())) {
                     totalPayoutFromEU = totalPayoutFromEU.add(t.getPayout());
@@ -655,7 +657,7 @@ public class Main {
                         }
                     }
                 }
-                totalConverted = totalConverted.add(t.getAmountConverted());
+                totalConverted = totalConverted.add(t.getAmountConverted());                
             }
         }
         
@@ -751,7 +753,7 @@ public class Main {
             "\n" + 
             "# XLSX sheets generation control (not that xchange sheet need online NBP data\n" + 
             "# so when set to true internet connection is required in order to generate \n" + 
-            "# output).\n" + 
+            "# output even io local mode).\n" + 
             "output.xchange.sheet = <true|false>\n" + 
             "output.vat.sheet = <true|false>\n" + 
             "output.summary.sheet = <true|false>\n" + 

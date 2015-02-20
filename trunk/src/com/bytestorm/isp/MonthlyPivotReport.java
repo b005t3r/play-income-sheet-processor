@@ -87,10 +87,6 @@ public class MonthlyPivotReport {
         Log.v("  days in month: " + daysCount + " currencies count: " + currencies.length);
         // construct pivot data
         for (Transaction t : transactions) {
-            // skip tax deduction
-            if (null == t.getId()) {
-                continue;
-            }
             final int day = new DateTime(t.getDate()).getDayOfMonth() - 1;
             final int currency = currencyIndexes.get(t.getBuyerCurrency());
             perDay[day].add(t);
@@ -150,7 +146,7 @@ public class MonthlyPivotReport {
         final DateTime firstDate = new DateTime(transactions.get(0).getDate());
         final TreeSet<String> currenciesSet = new TreeSet<>();
         // verify that all transactions are from single month
-        for (Transaction t : transactions) {
+        for (Transaction t : transactions) {            
             final DateTime date = new DateTime(t.getDate(), DateTimeZone.UTC);
             if (date.getYear() != firstDate.getYear() && date.getMonthOfYear() != firstDate.getMonthOfYear()) {
                 throw new IllegalArgumentException("Transactions from more than one month " + date + " " + firstDate);

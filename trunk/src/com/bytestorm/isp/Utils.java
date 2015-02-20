@@ -12,7 +12,7 @@ import java.util.zip.ZipInputStream;
 
 public class Utils {
     
-    public static void unpack(File zipFile, File outFile) throws IOException {
+    public static String unpack(File zipFile, File outFile) throws IOException {
         try (ZipFile zip = new ZipFile(zipFile)) {
             Enumeration<? extends ZipEntry> entries = zip.entries();
             if (!entries.hasMoreElements()) {
@@ -31,15 +31,18 @@ public class Utils {
                     }
                 }
             }
+            return entry.getName();
         }
     }
     
-    public static void unpack(InputStream zipStream, File outFile) throws IOException {
+    public static String unpack(InputStream zipStream, File outFile) throws IOException {
         try (ZipInputStream zip = new ZipInputStream(zipStream)) {
             ZipEntry entry = zip.getNextEntry();
+            String origName;
             if (null == entry) {
                 throw new IOException("Zip with one file expected (empty found)");
             }            
+            origName = entry.getName();
             Log.v("Unpacking report file " + entry.getName() + " from zip stream");
             try (OutputStream out = new FileOutputStream(outFile)) {
                 byte[] buffer = new byte[64 * 1024];
@@ -50,9 +53,10 @@ public class Utils {
             if (null != zip.getNextEntry()) {
                 throw new IOException("Zip with one file expected (more entries found)");
             }
+            return origName;
         }
     }
-
+    
     private Utils() {
     }
 }
