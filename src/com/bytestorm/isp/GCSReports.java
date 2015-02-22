@@ -88,16 +88,11 @@ public class GCSReports implements ReportsProvider {
             for (Map.Entry<String, ArrayList<File>> entry : collisions.entrySet()) {
                 if (entry.getValue().size() > 1) {
                     // colliding filename found
-                    String fname = entry.getKey();
-                    String ext = "";
-                    int extPos = fname.lastIndexOf('.'); 
-                    if (extPos > 0) {
-                        ext = fname.substring(extPos);
-                        fname = fname.substring(0, extPos);                        
-                    }
+                    String name = Utils.splitFileName(entry.getKey())[0];
+                    String ext = Utils.splitFileName(entry.getKey())[1];                    
                     int n = 1;
                     for (File f : entry.getValue()) {
-                        mapping.put(f, fname + " (" + (n++) + ")" + ext);
+                        mapping.put(f, name + " (" + (n++) + ")" + ext);
                     }
                 }
             }

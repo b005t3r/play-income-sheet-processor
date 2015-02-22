@@ -22,7 +22,6 @@ public class Utils {
             if (entries.hasMoreElements()) {
                 throw new IOException("Zip with one file expected (more entries found)");
             }
-            Log.v("Unpacking report file " + entry.getName() + " from file " + zipFile.getName());
             try (InputStream in = zip.getInputStream(entry)) {
                 try (OutputStream out = new FileOutputStream(outFile)) {
                     byte[] buffer = new byte[64 * 1024];
@@ -42,8 +41,7 @@ public class Utils {
             if (null == entry) {
                 throw new IOException("Zip with one file expected (empty found)");
             }            
-            origName = entry.getName();
-            Log.v("Unpacking report file " + entry.getName() + " from zip stream");
+            origName = entry.getName();            
             try (OutputStream out = new FileOutputStream(outFile)) {
                 byte[] buffer = new byte[64 * 1024];
                 for (int read = 0; (read = zip.read(buffer)) > 0; ) {
@@ -55,6 +53,14 @@ public class Utils {
             }
             return origName;
         }
+    }
+    
+    public static String[] splitFileName(String fileName) {
+        int extPos = fileName.lastIndexOf('.'); 
+        if (extPos > 0) {
+            return new String[] { fileName.substring(extPos), fileName.substring(0, extPos) };                        
+        }
+        return new String[] { fileName, "" };
     }
     
     private Utils() {
