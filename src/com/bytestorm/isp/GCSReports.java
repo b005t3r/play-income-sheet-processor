@@ -8,7 +8,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.Serializable;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -18,11 +20,16 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.prefs.BackingStoreException;
+import java.util.prefs.Preferences;
 
 import org.joda.time.DateTime;
 
@@ -36,8 +43,11 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.util.IOUtils;
+import com.google.api.client.util.store.AbstractDataStore;
+import com.google.api.client.util.store.AbstractDataStoreFactory;
+import com.google.api.client.util.store.DataStore;
 import com.google.api.client.util.store.DataStoreFactory;
-import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.storage.Storage;
 import com.google.api.services.storage.StorageScopes;
 import com.google.api.services.storage.model.Objects;
@@ -99,7 +109,7 @@ public class GCSReports implements ReportsProvider {
             for (Map.Entry<File, String> entry : mapping.entrySet()) {
                 final File src = entry.getKey();
                 final File dst = new File(entry.getValue());
-                Files.copy(src.toPath(), dst.toPath());
+                Files.copy(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING);
             }
         }
     }
@@ -177,6 +187,7 @@ public class GCSReports implements ReportsProvider {
     
     private Credential authorizeUser(HttpTransport http, InputStream creds) throws IOException, IllegalArgumentException {
         try {
+            System.setProperty("org.mortbay.log.class", SimpleJettyLogger.class.getName());
             GoogleClientSecrets secret = null;
             try {
                 secret = GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(creds));            
@@ -189,10 +200,8 @@ public class GCSReports implements ReportsProvider {
             if (null == secret.getDetails().getClientId() || null == secret.getDetails().getClientSecret()) {
                 throw new IllegalArgumentException("Client id file is not well formed.");
             }
-            DataStoreFactory dataStoreFactory = new FileDataStoreFactory(new File(System.getProperty("java.io.tmpdir"), 
-                    "com_bytestorm_isp_gcs_store"));
             GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(http, JSON_FACTORY, secret, GCS_SCOPES)
-                    .setDataStoreFactory(dataStoreFactory)
+                    .setDataStoreFactory(DATA_STORE_FACTORY)
                     .build();
             return new AuthorizationCodeInstalledApp(flow, new LocalServerReceiver()).authorize("user");
         } finally {
@@ -225,6 +234,73 @@ public class GCSReports implements ReportsProvider {
         }
     }
     
+    private static class PreferencesDataStore<V extends Serializable> extends AbstractDataStore<V> {
+        PreferencesDataStore(DataStoreFactory dataStore) {
+            super(dataStore, "com.bytestorm.isp.gcs"); 
+        }
+
+        @Override
+        public DataStore<V> clear() throws IOException {
+            try {
+                prefs.clear();
+                return this;
+            } catch (BackingStoreException e) {
+                throw new IOException("Preferences exception", e);
+            }            
+        }
+
+        @Override
+        public DataStore<V> delete(String key) throws IOException {
+            try {
+                prefs.remove(key);
+                prefs.sync();
+                return this;
+            } catch (BackingStoreException e) {
+                throw new IOException("Preferences exception", e);
+            }        
+        }
+
+        @Override
+        public V get(String key) throws IOException {
+            return IOUtils.deserialize(prefs.getByteArray(key, null));
+        }
+
+        @Override
+        public Set<String> keySet() throws IOException {
+            try {
+                return new HashSet<String>(Arrays.asList(prefs.keys()));
+            } catch (BackingStoreException e) {
+                throw new IOException("Preferences exception", e);
+            }             
+        }
+
+        @Override
+        public DataStore<V> set(String key, V value) throws IOException {
+            try {
+                prefs.putByteArray(key, IOUtils.serialize(value));
+                prefs.sync();
+                return this;
+            } catch (BackingStoreException e) {
+                throw new IOException("Preferences exception", e);
+            }            
+        }
+
+        @Override
+        public Collection<V> values() throws IOException {
+            try {
+                ArrayList<V> retval = new ArrayList<>();
+                for (String key : prefs.keys()) {
+                    retval.add(IOUtils.deserialize(prefs.getByteArray(key, null)));
+                }
+                return retval;
+            } catch (BackingStoreException e) {
+                throw new IOException("Preferences exception", e);
+            }                
+        }
+        
+        private Preferences prefs = Preferences.userNodeForPackage(PreferencesDataStore.class);
+    }
+    
     private String bucket;
     private DateTime date;
     private ArrayList<File> earningReports = new ArrayList<>();
@@ -234,9 +310,14 @@ public class GCSReports implements ReportsProvider {
     private static final String DEFAULT_BUCKET = "<PLAY_BUCKET>";
     
     private static final String APP_NAME = "Bytestorm-ISP/1.0";
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyyMM");       
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyyMM");
     
-    private static final Collection<String> GCS_SCOPES = Collections.singleton(StorageScopes.DEVSTORAGE_READ_ONLY);
-    
-    private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();    
+    private static final Collection<String> GCS_SCOPES = Collections.singleton(StorageScopes.DEVSTORAGE_READ_ONLY);   
+    private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();        
+    private static final DataStoreFactory DATA_STORE_FACTORY = new AbstractDataStoreFactory() {        
+        @Override
+        protected <V extends Serializable> DataStore<V> createDataStore(String arg0) throws IOException {
+            return new PreferencesDataStore<V>(this);
+        }
+    };
 }
