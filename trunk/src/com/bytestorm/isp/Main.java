@@ -247,12 +247,12 @@ public class Main {
         File[] earningsReports = reports.getEarningsReportsFiles();        
         for (File file : earningsReports) {
             Log.v("Loading earnings CSV file " + file.getAbsolutePath());
-            try(ICsvBeanReader beanReader = new CsvBeanReader(new FileReader(file), CsvPreference.STANDARD_PREFERENCE)) {            
+            try(ICsvBeanReader beanReader = new CsvBeanReader(new FileReader(file), CsvPreference.STANDARD_PREFERENCE)) {
                 /* final String[] header = */ beanReader.getHeader(true); // header will be ignored                
                 Transaction t;            
                 while ((t = beanReader.read(Transaction.class, Transaction.MAPPING, Transaction.CSV)) != null) {
                     if (null == t.getTransactionType()) {
-                        // tax deduction reports in some cases contains invalid rows with 0 payout
+                        // tax deduction reports in some cases contains invalid rows with 0 payout, so skip it
                         if (BigDecimal.ZERO.compareTo(t.getPayout()) == 0) {
                             continue;
                         }
