@@ -58,7 +58,7 @@ public class Utils {
     public static String[] splitFileName(String fileName) {
         int extPos = fileName.lastIndexOf('.'); 
         if (extPos > 0) {
-            return new String[] { fileName.substring(extPos), fileName.substring(0, extPos) };                        
+            return new String[] { fileName.substring(0, extPos), fileName.substring(extPos) };                        
         }
         return new String[] { fileName, "" };
     }

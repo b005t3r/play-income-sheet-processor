@@ -62,6 +62,7 @@ public class Main {
         options.addOption(null, "no-vat-sheet", false, "disables vat sheet output");
         options.addOption(null, "no-vat", false, "disables VAT data processing (sales reports will not be used, implies no-vat-sheet)");
         options.addOption(null, "keep-reports", false, "keep download CSV reports, this switch is ignored in local mode");
+        options.addOption(null, "process-tax-reports", false, "process tax only records");
         help.setWidth(80);
         try {            
             final CommandLine cli = parser.parse(options, args);
@@ -148,6 +149,9 @@ public class Main {
             if (cli.hasOption("no-vat")) {
                 config.setBoolean("process.transactions.vat", false);
             }
+            if (cli.hasOption("process-tax-reports")) {
+                config.setBoolean("process.tax.only.reports", false);
+            }            
             if (cli.hasOption("no-xchange-sheet")) {
                 config.setBoolean("output.xchange.sheet", false);
             }
@@ -175,7 +179,9 @@ public class Main {
                 }
             }
             // process transactions
-            List<Transaction> transactions = parseInputCsvs(reports, !config.getBoolean("process.transactions.vat", true));
+            List<Transaction> transactions = parseInputCsvs(reports, 
+                    !config.getBoolean("process.transactions.vat", true),
+                    !config.getBoolean("process.tax.only.reports", false));
             final Date from = transactions.get(0).getDate();
             final Date to = transactions.get(transactions.size() - 1).getDate();
             if (config.getBoolean("output.xchange.sheet", true)) {                
@@ -236,19 +242,18 @@ public class Main {
         }
     }
     
-    private static List<Transaction> parseInputCsvs(ReportsProvider reports, boolean noVat) throws IOException {
-        ArrayList<Transaction> retval = new ArrayList<>();
-        HashMap<String, Integer> sellsBySku = new HashMap<>();
-        HashMap<String, Integer> refundsBySku = new HashMap<>();
-        HashSet<String> skus = new HashSet<>();
-        HashMap<String, Transaction> transactionsLookup = new HashMap<>();
-        BigDecimal income = BigDecimal.ZERO;
-        BigDecimal taxDeduction = BigDecimal.ZERO;
-        File[] earningsReports = reports.getEarningsReportsFiles();        
+    private static List<Transaction> parseInputCsvs(ReportsProvider reports, boolean noVat, boolean noTaxOnlyReports) throws IOException {
+        ArrayList<Transaction> retval = new ArrayList<>();        
+        File[] earningsReports = reports.getEarningsReportsFiles();
+        int ignoredTaxReportsCount = 0;
         for (File file : earningsReports) {
-            Log.v("Loading earnings CSV file " + file.getAbsolutePath());
-            try(ICsvBeanReader beanReader = new CsvBeanReader(new FileReader(file), CsvPreference.STANDARD_PREFERENCE)) {
-                /* final String[] header = */ beanReader.getHeader(true); // header will be ignored                
+            // report data
+            ArrayList<Transaction> reportTransactions = new ArrayList<>();
+            BigDecimal incomeInReport = BigDecimal.ZERO;
+            int transactionsInReport = 0;
+            boolean taxOnlyReport = true;
+            try(ICsvBeanReader beanReader = new CsvBeanReader(new FileReader(file), CsvPreference.STANDARD_PREFERENCE)) {                
+                /* final String[] header = */ beanReader.getHeader(true); // header will be ignored                                
                 Transaction t;            
                 while ((t = beanReader.read(Transaction.class, Transaction.MAPPING, Transaction.CSV)) != null) {
                     if (null == t.getTransactionType()) {
@@ -264,46 +269,80 @@ public class Main {
                             throw new IOException("Invalid row " + beanReader.getRowNumber() 
                                     + " - non-tax deduction transaction without id\n" + beanReader.getUntokenizedRow());
                         }
-                        taxDeduction = taxDeduction.add(t.getPayout());
-                    } else {
-                        // initialize per SKU counters
-                        String sku = t.getSkuId();
-                        if (!sellsBySku.containsKey(sku)) {
-                            sellsBySku.put(sku, 0);
-                        }
-                        if (!refundsBySku.containsKey(sku)) {
-                            refundsBySku.put(sku, 0);
-                        }
-                        skus.add(sku);
-                        if (Transaction.Type.CHARGE == t.getTransactionType()) {
-                            sellsBySku.put(sku, sellsBySku.get(sku) + 1);
-                            transactionsLookup.put(t.getId(), t);
-                        } else if (Transaction.Type.REFUND == t.getTransactionType()) {
-                            refundsBySku.put(sku, refundsBySku.get(sku) + 1);
-                        }                        
                     }
-                    income = income.add(t.getPayout());
-                    retval.add(t);                    
+                    incomeInReport = incomeInReport.add(t.getPayout());
+                    ++transactionsInReport;
+                    if (Transaction.Type.TAX != t.getTransactionType()) {
+                        taxOnlyReport = false;
+                    }                    
+                    reportTransactions.add(t);   
+                }                               
+            }
+            if (taxOnlyReport) {
+                if (noTaxOnlyReports) {
+                    Log.v("Tax only report processed (ignored)");
+                    ++ignoredTaxReportsCount;
+                } else {
+                    Log.v("Tax only report processed");
+                    retval.addAll(reportTransactions);
                 }
-                Log.v("File loaded");
-                Log.v("  total entries: " + retval.size());                
-            }  
+            } else {
+                Log.v("Transactions report processed");
+                retval.addAll(reportTransactions);
+            }
+            Log.v(String.format("  - total income : %.02f PLN", incomeInReport.floatValue()));
+            Log.v("  - total entries: " + transactionsInReport);                     
         }
+        // collect global info
+        HashMap<String, Integer> sellsBySku = new HashMap<>();
+        HashMap<String, Integer> refundsBySku = new HashMap<>();
+        HashSet<String> skus = new HashSet<>();        
+        BigDecimal income = BigDecimal.ZERO;
+        BigDecimal taxDeduction = BigDecimal.ZERO;
+        HashMap<String, Transaction> transactionsLookup = new HashMap<>();
+        for (Transaction t : retval) {
+            if (Transaction.Type.TAX == t.getTransactionType()) {                    
+                taxDeduction = taxDeduction.add(t.getPayout());
+            } else {
+                // initialize per SKU counters
+                String sku = t.getSkuId();
+                if (!sellsBySku.containsKey(sku)) {
+                    sellsBySku.put(sku, 0);
+                }
+                if (!refundsBySku.containsKey(sku)) {
+                    refundsBySku.put(sku, 0);
+                }
+                skus.add(sku);
+                if (Transaction.Type.CHARGE == t.getTransactionType()) {
+                    sellsBySku.put(sku, sellsBySku.get(sku) + 1);
+                    transactionsLookup.put(t.getId(), t);
+                } else if (Transaction.Type.REFUND == t.getTransactionType()) {
+                    refundsBySku.put(sku, refundsBySku.get(sku) + 1);
+                }                    
+            }
+            income = income.add(t.getPayout());
+        }
+        Log.v("Reports processed");
+        Log.v("  - total reports: " + earningsReports.length);
+        if (ignoredTaxReportsCount > 0) {
+            Log.v("    - ignored tax only reports: " + ignoredTaxReportsCount);
+        }
+        Log.v("  - total entries: " + retval.size());
+        Log.v("Transactions by SKU:");
         for (String sku : skus) {
-            Log.v(sku + ":");
-            Log.v("  - sells  : " + sellsBySku.get(sku));
-            Log.v("  - refunds: " + refundsBySku.get(sku));
-            Log.v(String.format("Intl tax deduction: %.02f PLN", taxDeduction.negate().floatValue()));
+            Log.v("  - SKU: " + sku);
+            Log.v("    - sells  : " + sellsBySku.get(sku));
+            Log.v("    - refunds: " + refundsBySku.get(sku));            
         }
-        Log.v(String.format("Total income: %.02f PLN", income.floatValue()));
-        Log.v("");
+        Log.v(String.format("Tax deduction: %.02f PLN", taxDeduction.negate().floatValue()));
+        Log.v(String.format("Total income : %.02f PLN", income.floatValue()));
         Collections.sort(retval, new Comparator<Transaction>() {
             @Override
             public int compare(Transaction o1, Transaction o2) {
                 return Long.compare(o1.getDate().getTime(), o2.getDate().getTime());
             }
         });
-        if (!noVat) {
+        if (!noVat) {            
             File[] salesReports = reports.getSalesReportsFiles();
             for (File file : salesReports) {
                 Log.v("Loading sales report CSV file " + file.getAbsolutePath());
@@ -749,7 +788,13 @@ public class Main {
             "# sales report for report month and next one is needed due to differences in\n" + 
             "# billing and charging time).\n" + 
             "# Setting this property to false implies that VAT sheet will not be generated.\n" + 
-            "process.transactions.vat = <true|false>\n" + 
+            "process.transactions.vat = <true|false>\n" +
+            "\n" + 
+            "# Determine if tax deduction reports (issued every month) should be processed.\n" + 
+            "# By default this processing is disabled and tax reports are ignored since it\n" +
+            "# seems that this information is presnet in main transaction report sheet as\n" +
+            "# well\n" +
+            "process.tax.only.reports = <true|false>\n" + 
             "\n" + 
             "# XLSX sheets generation control (not that xchange sheet need online NBP data\n" + 
             "# so when set to true internet connection is required in order to generate \n" + 
