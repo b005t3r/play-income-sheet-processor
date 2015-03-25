@@ -21,6 +21,9 @@ public class LocalReports implements ReportsProvider {
         }                        
         // parse content of provided directory                
         for (File f : reports) {
+            if(f.isHidden())
+                continue;
+
             final String filename = f.getName();
             Matcher m;
             m = RE_EARNINGS_ZIP.matcher(filename);
