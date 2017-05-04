@@ -21,7 +21,7 @@ import org.supercsv.cellprocessor.ift.CellProcessor;
  */
 public class Transaction {
     public static enum Type {
-        CHARGE("Charge"), FEE("Google fee"), REFUND("Charge refund"), FEE_REFUND("Google fee refund"), TAX("Tax");
+        CHARGE("Charge"), FEE("Google fee"), REFUND("Charge refund"), FEE_REFUND("Google fee refund"), TAX("Tax"), TAX_REFUND("Tax refund");
         
         private Type(String desc) {
             this.desc = desc;
