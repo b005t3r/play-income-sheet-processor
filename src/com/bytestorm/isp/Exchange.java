@@ -88,7 +88,8 @@ public class Exchange {
     }
     
     public void download() throws IOException, SAXException, ParseException {
-        final URL url = new URL("http://www.nbp.pl/kursy/xml/dir.txt");               
+        final URL url = new URL("http://www.nbp.pl/kursy/xml/dir.txt");
+        //final URL url = new URL("http://www.nbp.pl/kursy/xml/dir2016.txt");
         final LinkedList<DirEntry> tableA = new LinkedList<>();
         final LinkedList<DirEntry> tableB = new LinkedList<>();
         Log.v("Downloading and parsing exchange tables directory");
